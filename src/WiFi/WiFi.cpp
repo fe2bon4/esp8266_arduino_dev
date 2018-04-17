@@ -1,5 +1,6 @@
 #include "WiFi.h"
 #include <Ticker.h>
+#include <ESP8266Ping.h>
 
 const char *ssid = "PLDTMyDSLBiz-Home";
 const char *password = "TCB03051993";
@@ -17,23 +18,27 @@ const char *password = "TCB03051993";
 */
 
 Logger WiFi_Logger("WiFi");
-IPAddress ip(10,1,255,129);  //Node static IP
-IPAddress gateway(10,1,0,1);
-IPAddress subnet(255,255,255,0);
+IPAddress ip(10,1,0,2);  //Node static IP
+IPAddress gateway(10,1,255,253);
+IPAddress subnet(255,255,0,0);
 
 
 Ticker async_bootWifi;
 Ticker async_checkWifi;
+Ticker async_ledStatus;
 
+bool led_connectionStatus = false;
 bool connectionDisplayed =false;
 uint8_t connectAttempts = 0;
 uint8_t ssidAttempts = 0;
 
 void async_ConnectToWiFi();
 void async_CheckConnection();
+void async_LedStatus();
 
-const char *known_ssid[2]={"DNA_Secondary","PLDTMyDSLBiz-Home"};
-const char *known_password[2]={"9492423670mlink","TCB03051993"};
+const int COUNT_KNOWN = 3;
+const char *known_ssid[COUNT_KNOWN]={"PLDTMyDSLBiz-Home","PLDTMyDSLBiz1-Home","PLDTHOMEDSL-HOME"};
+const char *known_password[COUNT_KNOWN]={"TCB03051993", "TCB03051993","TCB03051993"};
 
 
 String printEncryptionType(int thisType) {
@@ -88,7 +93,10 @@ String listNetworks() {
   }
 
 void async_ConnectToWiFi(){
-   if(WiFi.status() != WL_CONNECTED  ) {
+  const int status = WiFi.status();
+
+   if(status != WL_CONNECTED  ) {
+
    } else {
         connectAttempts= 0;
         
@@ -98,33 +106,57 @@ void async_ConnectToWiFi(){
 
 void async_CheckConnection(){
     if(WiFi.status() == WL_CONNECTED) {
+      
         if(!connectionDisplayed){
+            digitalWrite(LED_BUILTIN,0);
             IPAddress local = WiFi.localIP();
+            IPAddress subnet = WiFi.subnetMask();
+
             String local_string = String(local[0]) +"."+ String(local[1]) +"."+ String(local[2]) +"."+ String(local[3]);   
-            WiFi_Logger.log( "Connected to " + String(ssid) );
+            String subnet_string = String(subnet[0]) +"."+ String(subnet[1]) +"."+ String(subnet[2]) +"."+ String(subnet[3]);   
+
+            WiFi_Logger.log( "Connected to " + String(known_ssid[ssidAttempts]) );
             WiFi_Logger.log( "IP address: " + local_string );
+            WiFi_Logger.log( "Subnet Mask: " + subnet_string );
             connectionDisplayed = true;
         }
     }
     else if( WiFi.status() == WL_DISCONNECTED  ){
         connectionDisplayed=false;
-        WiFi_Logger.log ( "WiFi Disconnected" );
-        ssidAttempts ++;
-        WiFi_Logger.log("Connecting to "+ String(known_ssid[ssidAttempts]));
-        WiFi.config(ip, gateway, subnet);
+        WiFi_Logger.log ( "WiFi is Not Connected" );
+
+        WiFi_Logger.log("Attempt "+String(ssidAttempts)+", Connecting to "+ String(known_ssid[ssidAttempts]));
+        ssidAttempts = ssidAttempts+1;
+        if(ssidAttempts >= COUNT_KNOWN){
+          ssidAttempts =  0;
+        }
+        // WiFi.config(ip, gateway, subnet);
         WiFi.begin(known_ssid[ssidAttempts], known_password[ssidAttempts]);
+        
     } 
+    
 }
 
+void async_LedStatus(){
+  const int status =  WiFi.status();
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  if(status == WL_CONNECTED){
+    led_connectionStatus = true;
+  } else {
+    led_connectionStatus= !led_connectionStatus;
+  }
+  digitalWrite(LED_BUILTIN, !led_connectionStatus);
+}
 
 void boot_WiFi(){
     
     WiFi_Logger.enable();
-
-    WiFi.config(ip, gateway, subnet);
     WiFi.begin(known_ssid[ssidAttempts], known_password[ssidAttempts]);
+    WiFi.config(ip, gateway, subnet);
     // Wait for connection
 
     //async_bootWifi.attach(1, async_ConnectToWiFi);
+    async_ledStatus.attach(.5, async_LedStatus);
     async_checkWifi.attach(5, async_CheckConnection);
 }

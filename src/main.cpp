@@ -42,11 +42,14 @@
      digitalWrite ( LED_BUILTIN, 1 );
      Serial.begin ( 115200 );
      Serial.println ( "" );
-    
+     Serial.println ( "" );
+     Serial.println ( "" );
+     Serial.println ( "Starting Boot Sequence" );   
 
      boot_WEB();
      boot_WiFi(); 
      boot_OTA();
+
     
  }
  
